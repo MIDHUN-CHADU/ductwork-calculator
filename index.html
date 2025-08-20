@@ -496,8 +496,8 @@
                                     </div>
                                 </div>
                             </div>
-                            <div class="input-group" id="rectangularMethodGroup">
-                                <label for="rectangularMethod">Sizing Method</label>
+                            <div class="input-group" id="rectangularMethodGroup" style="display: block;">
+                                <label for="rectangularMethod">Sizing Method <span class="required">*</span></label>
                                 <select id="rectangularMethod">
                                     <option value="">Select sizing method</option>
                                     <option value="auto">🎯 Auto Size (Square-ish)</option>
@@ -612,10 +612,14 @@
                 const rectangularMethodGroup = document.getElementById('rectangularMethodGroup');
                 const fixedHeightGroup = document.getElementById('fixedHeightGroup');
                 
+                console.log('Shape selected:', this.selectedShape); // Debug log
+                
                 if (this.selectedShape === 'rectangular') {
                     rectangularMethodGroup.style.display = 'block';
+                    rectangularMethodGroup.style.visibility = 'visible';
                 } else {
                     rectangularMethodGroup.style.display = 'none';
+                    rectangularMethodGroup.style.visibility = 'hidden';
                     fixedHeightGroup.classList.remove('show');
                     document.getElementById('rectangularMethod').value = '';
                     document.getElementById('fixedHeight').value = '';
@@ -657,12 +661,51 @@
                 setTimeout(() => {
                     try {
                         const formData = new FormData(e.target);
+                        const airflow = parseFloat(formData.get('airflow'));
+                        const velocityClass = formData.get('velocityClass');
+                        const ductClass = formData.get('ductClass');
+                        
+                        console.log('Form data:', { airflow, velocityClass, ductClass, selectedShape: this.selectedShape });
+                        
+                        // Check required fields
+                        if (!airflow) {
+                            alert('Please enter an airflow rate');
+                            return;
+                        }
+                        if (!velocityClass) {
+                            alert('Please select a velocity classification');
+                            return;
+                        }
+                        if (!ductClass) {
+                            alert('Please select a duct classification');
+                            return;
+                        }
+                        
+                        // Check rectangular method if rectangular is selected
+                        if (this.selectedShape === 'rectangular') {
+                            const rectangularMethod = formData.get('rectangularMethod');
+                            console.log('Rectangular method:', rectangularMethod);
+                            if (!rectangularMethod) {
+                                alert('Please select a rectangular sizing method (Auto Size or Fixed Height)');
+                                return;
+                            }
+                            
+                            if (rectangularMethod === 'fixed-height') {
+                                const fixedHeight = parseFloat(formData.get('fixedHeight'));
+                                if (!fixedHeight || fixedHeight < 4 || fixedHeight > 72) {
+                                    alert('Please enter a valid fixed height between 4 and 72 inches');
+                                    return;
+                                }
+                            }
+                        }
+                        
                         const results = this.calculateDuct(formData);
                         
                         if (results) {
                             this.displayResults(results);
                         }
                     } catch (error) {
+                        console.error('Calculation error:', error);
                         alert('Calculation error: ' + error.message);
                     } finally {
                         // Hide loading state
