@@ -78,6 +78,14 @@
             font-size: 1.1em;
         }
 
+        #rectangularOptions {
+            display: none;
+        }
+        
+        #rectangularOptions.show {
+            display: block;
+        }
+
         .form-group input, .form-group select {
             width: 100%;
             padding: 15px;
@@ -297,6 +305,35 @@
                             </div>
                         </div>
                     </div>
+                    
+                    <div class="form-group" id="rectangularOptions" style="display: block;">
+                        <label>Rectangular Sizing Method</label>
+                        <div class="duct-shape">
+                            <div class="shape-option active" data-method="auto">
+                                Auto Size
+                            </div>
+                            <div class="shape-option" data-method="fixed-height">
+                                Fixed Height
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="form-group" id="fixedHeightGroup" style="display: none;">
+                        <label for="fixedHeight">Fixed Height (inches)</label>
+                        <input type="number" id="fixedHeight" name="fixedHeight" placeholder="Enter height in inches" min="4" max="72">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="insulationThickness">Insulation Thickness (inches)</label>
+                        <select id="insulationThickness" name="insulationThickness">
+                            <option value="0">No Insulation</option>
+                            <option value="1">1 inch</option>
+                            <option value="1.5">1.5 inches</option>
+                            <option value="2" selected>2 inches</option>
+                            <option value="3">3 inches</option>
+                            <option value="4">4 inches</option>
+                        </select>
+                    </div>
                 </div>
                 
                 <button type="submit" class="calculate-btn">Calculate Duct Size</button>
@@ -333,6 +370,7 @@
                 this.results = document.getElementById('results');
                 this.resultsContent = document.getElementById('resultsContent');
                 this.selectedShape = 'rectangular';
+                this.sizingMethod = 'auto';
                 
                 this.initializeEventListeners();
             }
@@ -410,6 +448,7 @@
                 const airflow = parseFloat(formData.get('airflow'));
                 const velocityClass = formData.get('velocityClass');
                 const ductClass = formData.get('ductClass');
+                const insulationThickness = parseFloat(formData.get('insulationThickness')) || 0;
                 
                 let velocity;
                 if (velocityClass === 'custom') {
@@ -431,16 +470,26 @@
                     velocity = velocityLimits[velocityClass];
                 }
                 
+                // Get fixed height if using that method
+                let fixedHeight = null;
+                if (this.selectedShape === 'rectangular' && this.sizingMethod === 'fixed-height') {
+                    fixedHeight = parseFloat(formData.get('fixedHeight'));
+                    if (!fixedHeight || fixedHeight < 4 || fixedHeight > 72) {
+                        alert('Please enter a valid fixed height between 4 and 72 inches');
+                        return;
+                    }
+                }
+                
                 if (!airflow || !velocity || !ductClass || !velocityClass) {
                     alert('Please fill in all required fields');
                     return;
                 }
                 
-                const results = this.calculateDuctSize(airflow, velocity, ductClass, velocityClass);
+                const results = this.calculateDuctSize(airflow, velocity, ductClass, velocityClass, insulationThickness, fixedHeight);
                 this.displayResults(results);
             }
             
-            calculateDuctSize(airflow, velocity, ductClass, velocityClass) {
+            calculateDuctSize(airflow, velocity, ductClass, velocityClass, insulationThickness, fixedHeight) {
                 // Required cross-sectional area (sq ft)
                 const requiredArea = airflow / velocity;
                 
@@ -449,37 +498,53 @@
                 let actualVelocity = velocity;
                 
                 if (this.selectedShape === 'rectangular') {
-                    // Calculate rectangular dimensions using aspect ratios
-                    const aspectRatios = [
-                        { ratio: 1, width: Math.sqrt(requiredArea), height: Math.sqrt(requiredArea) },
-                        { ratio: 1.5, width: Math.sqrt(requiredArea * 1.5), height: Math.sqrt(requiredArea / 1.5) },
-                        { ratio: 2, width: Math.sqrt(requiredArea * 2), height: Math.sqrt(requiredArea / 2) },
-                        { ratio: 3, width: Math.sqrt(requiredArea * 3), height: Math.sqrt(requiredArea / 3) }
-                    ];
-                    
-                    // Convert to inches and round to standard sizes
-                    const bestOption = aspectRatios.map(option => {
-                        const widthIn = this.roundToStandardSize(option.width * 12);
-                        const heightIn = this.roundToStandardSize(option.height * 12);
-                        const actualArea = (widthIn * heightIn) / 144; // back to sq ft
-                        const actualVel = airflow / actualArea;
+                    if (this.sizingMethod === 'fixed-height' && fixedHeight) {
+                        // Calculate width based on fixed height
+                        const requiredWidth = (requiredArea * 144) / fixedHeight; // convert to inches
+                        const standardWidth = this.roundToStandardSize(requiredWidth);
+                        const actualArea = (standardWidth * fixedHeight) / 144; // back to sq ft
                         
-                        return {
-                            width: widthIn,
-                            height: heightIn,
-                            area: actualArea,
-                            velocity: actualVel,
-                            aspectRatio: option.ratio
+                        dimensions = {
+                            width: standardWidth,
+                            height: fixedHeight,
+                            actualArea: actualArea
                         };
-                    }).sort((a, b) => Math.abs(a.velocity - velocity) - Math.abs(b.velocity - velocity))[0];
-                    
-                    dimensions = {
-                        width: bestOption.width,
-                        height: bestOption.height,
-                        actualArea: bestOption.area
-                    };
-                    
-                    actualVelocity = bestOption.velocity;
+                        
+                        actualVelocity = airflow / actualArea;
+                        
+                    } else {
+                        // Auto-size rectangular dimensions using aspect ratios
+                        const aspectRatios = [
+                            { ratio: 1, width: Math.sqrt(requiredArea), height: Math.sqrt(requiredArea) },
+                            { ratio: 1.5, width: Math.sqrt(requiredArea * 1.5), height: Math.sqrt(requiredArea / 1.5) },
+                            { ratio: 2, width: Math.sqrt(requiredArea * 2), height: Math.sqrt(requiredArea / 2) },
+                            { ratio: 3, width: Math.sqrt(requiredArea * 3), height: Math.sqrt(requiredArea / 3) }
+                        ];
+                        
+                        // Convert to inches and round to standard sizes
+                        const bestOption = aspectRatios.map(option => {
+                            const widthIn = this.roundToStandardSize(option.width * 12);
+                            const heightIn = this.roundToStandardSize(option.height * 12);
+                            const actualArea = (widthIn * heightIn) / 144; // back to sq ft
+                            const actualVel = airflow / actualArea;
+                            
+                            return {
+                                width: widthIn,
+                                height: heightIn,
+                                area: actualArea,
+                                velocity: actualVel,
+                                aspectRatio: option.ratio
+                            };
+                        }).sort((a, b) => Math.abs(a.velocity - velocity) - Math.abs(b.velocity - velocity))[0];
+                        
+                        dimensions = {
+                            width: bestOption.width,
+                            height: bestOption.height,
+                            actualArea: bestOption.area
+                        };
+                        
+                        actualVelocity = bestOption.velocity;
+                    }
                     
                     // Calculate equivalent diameter for rectangular duct
                     equivalentDiameter = (4 * dimensions.actualArea * 144) / (2 * (dimensions.width + dimensions.height));
@@ -499,6 +564,19 @@
                     equivalentDiameter = standardDiameter;
                 }
                 
+                // Calculate overall dimensions including insulation
+                let overallDimensions = {};
+                if (this.selectedShape === 'rectangular') {
+                    overallDimensions = {
+                        width: dimensions.width + (2 * insulationThickness),
+                        height: dimensions.height + (2 * insulationThickness)
+                    };
+                } else {
+                    overallDimensions = {
+                        diameter: dimensions.diameter + (2 * insulationThickness)
+                    };
+                }
+                
                 // Calculate additional parameters with improved pressure loss based on velocity class
                 const pressureLoss = this.estimatePressureLoss(actualVelocity, ductClass, velocityClass);
                 const velocityPressure = Math.pow(actualVelocity / 4005, 2); // inches of water
@@ -506,13 +584,16 @@
                 return {
                     requiredArea: requiredArea,
                     dimensions: dimensions,
+                    overallDimensions: overallDimensions,
+                    insulationThickness: insulationThickness,
                     actualVelocity: actualVelocity,
                     equivalentDiameter: equivalentDiameter,
                     pressureLoss: pressureLoss,
                     velocityPressure: velocityPressure,
                     ductClass: ductClass,
                     velocityClass: velocityClass,
-                    shape: this.selectedShape
+                    shape: this.selectedShape,
+                    sizingMethod: this.sizingMethod
                 };
             }
             
@@ -569,25 +650,48 @@
             
             displayResults(results) {
                 let dimensionHtml = '';
+                let overallDimensionHtml = '';
                 
                 if (results.shape === 'rectangular') {
                     dimensionHtml = `
                         <div class="result-item">
-                            <h3>Width</h3>
-                            <div class="value">${results.dimensions.width} <span class="unit">inches</span></div>
+                            <h3>Duct Width</h3>
+                            <div class="value">${results.dimensions.width}" <span class="unit">bare duct</span></div>
                         </div>
                         <div class="result-item">
-                            <h3>Height</h3>
-                            <div class="value">${results.dimensions.height} <span class="unit">inches</span></div>
+                            <h3>Duct Height</h3>
+                            <div class="value">${results.dimensions.height}" <span class="unit">bare duct</span></div>
                         </div>
                     `;
+                    
+                    if (results.insulationThickness > 0) {
+                        overallDimensionHtml = `
+                            <div class="result-item">
+                                <h3>Overall Width</h3>
+                                <div class="value">${results.overallDimensions.width}" <span class="unit">w/ insulation</span></div>
+                            </div>
+                            <div class="result-item">
+                                <h3>Overall Height</h3>
+                                <div class="value">${results.overallDimensions.height}" <span class="unit">w/ insulation</span></div>
+                            </div>
+                        `;
+                    }
                 } else {
                     dimensionHtml = `
                         <div class="result-item">
-                            <h3>Diameter</h3>
-                            <div class="value">${results.dimensions.diameter} <span class="unit">inches</span></div>
+                            <h3>Duct Diameter</h3>
+                            <div class="value">${results.dimensions.diameter}" <span class="unit">bare duct</span></div>
                         </div>
                     `;
+                    
+                    if (results.insulationThickness > 0) {
+                        overallDimensionHtml = `
+                            <div class="result-item">
+                                <h3>Overall Diameter</h3>
+                                <div class="value">${results.overallDimensions.diameter}" <span class="unit">w/ insulation</span></div>
+                            </div>
+                        `;
+                    }
                 }
                 
                 // Get velocity class display name
@@ -602,8 +706,25 @@
                     'custom': 'Custom'
                 };
                 
+                // Add sizing method info for rectangular ducts
+                let sizingMethodHtml = '';
+                if (results.shape === 'rectangular') {
+                    const methodName = results.sizingMethod === 'fixed-height' ? 'Fixed Height' : 'Auto-Sized';
+                    sizingMethodHtml = `
+                        <div class="result-item">
+                            <h3>Sizing Method</h3>
+                            <div class="value">${methodName}</div>
+                        </div>
+                    `;
+                }
+                
                 this.resultsContent.innerHTML = `
                     ${dimensionHtml}
+                    ${overallDimensionHtml}
+                    <div class="result-item">
+                        <h3>Insulation</h3>
+                        <div class="value">${results.insulationThickness}" <span class="unit">thick</span></div>
+                    </div>
                     <div class="result-item">
                         <h3>Actual Area</h3>
                         <div class="value">${results.dimensions.actualArea.toFixed(2)} <span class="unit">sq ft</span></div>
@@ -616,6 +737,7 @@
                         <h3>Velocity Class</h3>
                         <div class="value">${velocityClassNames[results.velocityClass] || results.velocityClass}</div>
                     </div>
+                    ${sizingMethodHtml}
                     <div class="result-item">
                         <h3>Equivalent Diameter</h3>
                         <div class="value">${results.equivalentDiameter.toFixed(1)} <span class="unit">inches</span></div>
