@@ -747,12 +747,22 @@
                         let finalWidth = width;
 
                         // If velocity is too high, try larger width
-                        if (actualVelocity > velocity * 1.05) { // 5% tolerance
-                            const nextWidth = this.getNextLargerSize(width);
-                            if (nextWidth > width) {
-                                finalWidth = nextWidth;
-                                actualArea = (finalWidth * fixedHeight) / 144;
-                                actualVelocity = airflow / actualArea;
+                        if (actualVelocity > velocity) { // Remove tolerance - be strict about velocity limit
+                            let attempts = 0;
+                            const maxAttempts = 5;
+                            
+                            while (actualVelocity > velocity && attempts < maxAttempts) {
+                                const nextWidth = this.getNextLargerSize(finalWidth);
+                                if (nextWidth > finalWidth) {
+                                    finalWidth = nextWidth;
+                                    actualArea = (finalWidth * fixedHeight) / 144;
+                                    actualVelocity = airflow / actualArea;
+                                    attempts++;
+                                    console.log(`Fixed height attempt ${attempts}: ${finalWidth}" x ${fixedHeight}", velocity: ${Math.round(actualVelocity)} FPM`);
+                                } else {
+                                    console.log('No larger width available for fixed height');
+                                    break;
+                                }
                             }
                         }
 
@@ -765,7 +775,8 @@
                             overallWidth: finalWidth + (2 * insulation),
                             overallHeight: fixedHeight + (2 * insulation),
                             actualArea,
-                            actualVelocity
+                            actualVelocity,
+                            equivalentDiameter: 1.3 * Math.pow(finalWidth * fixedHeight, 0.625) / Math.pow(finalWidth + fixedHeight, 0.25)
                         };
                     } else {
                         // Auto size
@@ -776,43 +787,47 @@
                         let actualVelocity = airflow / actualArea;
 
                         // If velocity is too high, try larger dimensions
-                        if (actualVelocity > velocity * 1.05) { // 5% tolerance
+                        if (actualVelocity > velocity) { // Remove tolerance - be strict about velocity limit
                             const nextWidth = this.getNextLargerSize(width);
                             const nextHeight = this.getNextLargerSize(height);
                             
-                            // Try different combinations to get closest to target velocity
+                            // Try different combinations to get velocity under target
                             const options = [
                                 { w: nextWidth, h: height, area: (nextWidth * height) / 144 },
                                 { w: width, h: nextHeight, area: (width * nextHeight) / 144 },
                                 { w: nextWidth, h: nextHeight, area: (nextWidth * nextHeight) / 144 }
                             ];
                             
-                            // Choose the option with velocity closest to but not exceeding target
-                            let bestOption = { w: width, h: height, area: actualArea };
-                            let bestVelocity = actualVelocity;
+                            // Choose the smallest option that gets velocity under target
+                            let bestOption = null;
                             
-                            options.forEach(option => {
+                            for (let option of options) {
                                 const optionVelocity = airflow / option.area;
-                                if (optionVelocity <= velocity * 1.05 && optionVelocity < bestVelocity) {
-                                    bestOption = option;
-                                    bestVelocity = optionVelocity;
+                                if (optionVelocity <= velocity) {
+                                    if (!bestOption || option.area < bestOption.area) {
+                                        bestOption = option;
+                                    }
                                 }
-                            });
-                            
-                            // If no option is within tolerance, use the one with lowest velocity
-                            if (bestVelocity > velocity * 1.05) {
-                                bestOption = options.reduce((best, current) => {
-                                    const currentVel = airflow / current.area;
-                                    const bestVel = airflow / best.area;
-                                    return currentVel < bestVel ? current : best;
-                                });
-                                bestVelocity = airflow / bestOption.area;
                             }
                             
-                            width = bestOption.w;
-                            height = bestOption.h;
-                            actualArea = bestOption.area;
-                            actualVelocity = bestVelocity;
+                            // If we found a good option, use it. Otherwise, use the largest option.
+                            if (bestOption) {
+                                width = bestOption.w;
+                                height = bestOption.h;
+                                actualArea = bestOption.area;
+                                actualVelocity = airflow / actualArea;
+                            } else {
+                                // Use the largest option to get lowest velocity
+                                const largestOption = options.reduce((best, current) => {
+                                    return current.area > best.area ? current : best;
+                                });
+                                width = largestOption.w;
+                                height = largestOption.h;
+                                actualArea = largestOption.area;
+                                actualVelocity = airflow / actualArea;
+                            }
+                            
+                            console.log(`Rectangular auto-size: ${width}" x ${height}", velocity: ${Math.round(actualVelocity)} FPM`);
                         }
 
                         results = {
@@ -824,7 +839,8 @@
                             overallWidth: width + (2 * insulation),
                             overallHeight: height + (2 * insulation),
                             actualArea,
-                            actualVelocity
+                            actualVelocity,
+                            equivalentDiameter: 1.3 * Math.pow(width * height, 0.625) / Math.pow(width + height, 0.25)
                         };
                     }
                 } else {
@@ -834,14 +850,20 @@
                     let actualArea = Math.PI * Math.pow(diameter / 12, 2) / 4;
                     let actualVelocity = airflow / actualArea;
                     
-                    // If velocity is too high, try larger sizes
-                    while (actualVelocity > velocity * 1.05 && diameter < 36) { // 5% tolerance, max 36" diameter
+                    // Keep trying larger sizes until velocity is within limit
+                    let attempts = 0;
+                    const maxAttempts = 10; // Prevent infinite loop
+                    
+                    while (actualVelocity > velocity && diameter < 72 && attempts < maxAttempts) {
                         const nextDiameter = this.getNextLargerCircularSize(diameter);
                         if (nextDiameter > diameter) {
                             diameter = nextDiameter;
                             actualArea = Math.PI * Math.pow(diameter / 12, 2) / 4;
                             actualVelocity = airflow / actualArea;
+                            attempts++;
+                            console.log(`Attempt ${attempts}: Trying diameter ${diameter}", velocity: ${Math.round(actualVelocity)} FPM`);
                         } else {
+                            console.log('No larger diameter available');
                             break; // No larger size available
                         }
                     }
@@ -852,12 +874,13 @@
                         diameter,
                         overallDiameter: diameter + (2 * insulation),
                         actualArea,
-                        actualVelocity
+                        actualVelocity,
+                        equivalentDiameter: diameter // For circular ducts, equivalent diameter = actual diameter
                     };
                 }
 
                 results.velocityPressure = Math.pow(results.actualVelocity / 4005, 2);
-                results.velocityExceeded = results.actualVelocity > velocity * 1.05;
+                results.velocityExceeded = results.actualVelocity > velocity;
                 
                 return results;
             }
@@ -931,9 +954,6 @@
                 if (results.actualVelocity <= results.velocity) {
                     velocityStatus = '✅';
                     velocityColor = 'color: #059669;';
-                } else if (results.actualVelocity <= results.velocity * 1.05) {
-                    velocityStatus = '⚠️';
-                    velocityColor = 'color: #d97706;';
                 } else {
                     velocityStatus = '⚠️';
                     velocityColor = 'color: #dc2626;';
@@ -1019,7 +1039,7 @@
             }
 
             getNextLargerCircularSize(currentSize) {
-                const standards = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36];
+                const standards = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 40, 42, 44, 48, 52, 56, 60, 64, 68, 72];
                 const currentIndex = standards.indexOf(currentSize);
                 
                 if (currentIndex !== -1 && currentIndex < standards.length - 1) {
@@ -1036,7 +1056,7 @@
             }
 
             roundToStandardCircular(size) {
-                const standards = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36];
+                const standards = [4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 40, 42, 44, 48, 52, 56, 60, 64, 68, 72];
                 return standards.reduce((prev, curr) => 
                     Math.abs(curr - size) < Math.abs(prev - size) ? curr : prev
                 );
