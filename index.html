@@ -104,8 +104,8 @@
             font-weight: 600;
             cursor: pointer;
             transition: all 0.3s ease;
-            display: block;
-            margin: 0 auto;
+            display: inline-block;
+            margin: 10px;
             min-width: 200px;
         }
 
@@ -116,6 +116,36 @@
 
         .calculate-btn:active {
             transform: translateY(-1px);
+        }
+
+        .reset-btn {
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            color: white;
+            border: none;
+            padding: 18px 40px;
+            border-radius: 50px;
+            font-size: 1.2em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-block;
+            margin: 10px;
+            min-width: 200px;
+        }
+
+        .reset-btn:hover {
+            background: linear-gradient(135deg, #c0392b 0%, #a93226 100%);
+            transform: translateY(-3px);
+            box-shadow: 0 15px 35px rgba(231, 76, 60, 0.4);
+        }
+
+        .reset-btn:active {
+            transform: translateY(-1px);
+        }
+
+        .button-container {
+            text-align: center;
+            margin-top: 30px;
         }
 
         .results {
@@ -329,7 +359,10 @@
                     </div>
                 </div>
                 
-                <button type="submit" class="calculate-btn">Calculate Duct Size</button>
+                <div class="button-container">
+                    <button type="submit" class="calculate-btn">Calculate Duct Size</button>
+                    <button type="button" class="reset-btn" id="resetBtn">New Size</button>
+                </div>
             </form>
             
             <div id="results" class="results">
@@ -370,6 +403,9 @@
             initializeEventListeners() {
                 // Form submission
                 this.form.addEventListener('submit', (e) => this.handleSubmit(e));
+                
+                // Reset button
+                document.getElementById('resetBtn').addEventListener('click', () => this.resetForm());
                 
                 // Shape selection
                 document.querySelectorAll('.shape-option').forEach(option => {
@@ -424,7 +460,45 @@
                 }
             }
             
-            handleRectangularMethodChange(method) {
+            resetForm() {
+                // Clear all input fields
+                document.getElementById('airflow').value = '';
+                document.getElementById('velocityClass').value = '';
+                document.getElementById('ductClass').value = '';
+                document.getElementById('velocity').value = '';
+                document.getElementById('rectangularMethod').value = '';
+                document.getElementById('fixedHeight').value = '';
+                
+                // Reset insulation to default (2 inches)
+                document.getElementById('insulationThickness').value = '2';
+                
+                // Reset to rectangular shape (default)
+                document.querySelectorAll('.shape-option').forEach(opt => opt.classList.remove('active'));
+                document.querySelector('[data-shape="rectangular"]').classList.add('active');
+                this.selectedShape = 'rectangular';
+                
+                // Show rectangular method dropdown, hide others
+                document.getElementById('rectangularMethodGroup').style.display = 'block';
+                document.getElementById('fixedHeightGroup').style.display = 'none';
+                document.getElementById('customVelocityGroup').style.display = 'none';
+                
+                // Hide results
+                this.results.classList.remove('show');
+                
+                // Focus on airflow input for quick data entry
+                document.getElementById('airflow').focus();
+                
+                // Show a brief confirmation
+                const resetBtn = document.getElementById('resetBtn');
+                const originalText = resetBtn.textContent;
+                resetBtn.textContent = 'Reset ✓';
+                resetBtn.style.background = 'linear-gradient(135deg, #27ae60 0%, #2ecc71 100%)';
+                
+                setTimeout(() => {
+                    resetBtn.textContent = originalText;
+                    resetBtn.style.background = 'linear-gradient(135deg, #e74c3c 0%, #c0392b 100%)';
+                }, 1000);
+            }
                 const fixedHeightGroup = document.getElementById('fixedHeightGroup');
                 const fixedHeightInput = document.getElementById('fixedHeight');
                 
