@@ -78,10 +78,6 @@
             font-size: 1.1em;
         }
 
-        #rectangularSizingGroup {
-            display: none;
-        }
-
         .form-group input, .form-group select {
             width: 100%;
             padding: 15px;
@@ -227,6 +223,10 @@
             border-color: #667eea;
         }
 
+        .hidden {
+            display: none !important;
+        }
+
         @media (max-width: 768px) {
             .header h1 {
                 font-size: 2em;
@@ -302,9 +302,9 @@
                         </div>
                     </div>
                     
-                    <div class="form-group" id="rectangularSizingGroup" style="display: block;">
-                        <label for="rectangularSizing">Rectangular Sizing Method</label>
-                        <select id="rectangularSizing" name="rectangularSizing">
+                    <div class="form-group" id="rectangularMethodGroup" style="display: block;">
+                        <label for="rectangularMethod">Rectangular Sizing Method</label>
+                        <select id="rectangularMethod" name="rectangularMethod">
                             <option value="">Select Sizing Method</option>
                             <option value="auto">Auto Size (Square-ish)</option>
                             <option value="fixed-height">Fixed Height</option>
@@ -363,12 +363,12 @@
                 this.results = document.getElementById('results');
                 this.resultsContent = document.getElementById('resultsContent');
                 this.selectedShape = 'rectangular';
-                this.rectangularMethod = '';
                 
                 this.initializeEventListeners();
             }
             
             initializeEventListeners() {
+                // Form submission
                 this.form.addEventListener('submit', (e) => this.handleSubmit(e));
                 
                 // Shape selection
@@ -378,23 +378,41 @@
                 
                 // Velocity class selection
                 document.getElementById('velocityClass').addEventListener('change', (e) => {
-                    this.updateVelocityFromClass(e.target.value);
+                    this.handleVelocityClassChange(e.target.value);
+                });
+                
+                // Rectangular method selection
+                document.getElementById('rectangularMethod').addEventListener('change', (e) => {
+                    this.handleRectangularMethodChange(e.target.value);
                 });
             }
             
-            updateVelocityFromClass(velocityClass) {
+            selectShape(e) {
+                // Update visual selection
+                document.querySelectorAll('.shape-option').forEach(opt => opt.classList.remove('active'));
+                e.target.classList.add('active');
+                this.selectedShape = e.target.dataset.shape;
+                
+                // Show/hide rectangular method options
+                const rectangularMethodGroup = document.getElementById('rectangularMethodGroup');
+                const fixedHeightGroup = document.getElementById('fixedHeightGroup');
+                
+                if (this.selectedShape === 'rectangular') {
+                    // Show rectangular method dropdown
+                    rectangularMethodGroup.style.display = 'block';
+                } else {
+                    // Hide rectangular options when circular is selected
+                    rectangularMethodGroup.style.display = 'none';
+                    fixedHeightGroup.style.display = 'none';
+                    // Reset selections
+                    document.getElementById('rectangularMethod').value = '';
+                    document.getElementById('fixedHeight').value = '';
+                }
+            }
+            
+            handleVelocityClassChange(velocityClass) {
                 const customVelocityGroup = document.getElementById('customVelocityGroup');
                 const velocityInput = document.getElementById('velocity');
-                
-                const velocityLimits = {
-                    'quiet': 800,
-                    'standard': 1000,
-                    'economy': 1200,
-                    'loud': 1800,
-                    'low-pressure': 2500,
-                    'medium-pressure': 3500,
-                    'high-pressure': 6000
-                };
                 
                 if (velocityClass === 'custom') {
                     customVelocityGroup.style.display = 'block';
@@ -402,35 +420,23 @@
                 } else {
                     customVelocityGroup.style.display = 'none';
                     velocityInput.required = false;
-                    if (velocityLimits[velocityClass]) {
-                        velocityInput.value = velocityLimits[velocityClass];
-                    }
+                    velocityInput.value = '';
                 }
             }
             
-            selectShape(e) {
-                document.querySelectorAll('.shape-option').forEach(opt => opt.classList.remove('active'));
-                e.target.classList.add('active');
-                this.selectedShape = e.target.dataset.shape;
-            }
-            
-            setDefaultVelocities() {
-                const velocityRecommendations = {
-                    'supply-main': 1000,
-                    'supply-branch': 750,
-                    'return-main': 900,
-                    'return-branch': 600,
-                    'exhaust': 1250,
-                    'outside-air': 650
-                };
+            handleRectangularMethodChange(method) {
+                const fixedHeightGroup = document.getElementById('fixedHeightGroup');
+                const fixedHeightInput = document.getElementById('fixedHeight');
                 
-                this.velocityRecommendations = velocityRecommendations;
-            }
-            
-            updateRecommendedVelocity(ductClass) {
-                const velocityInput = document.getElementById('velocity');
-                if (this.velocityRecommendations[ductClass] && !velocityInput.value) {
-                    velocityInput.value = this.velocityRecommendations[ductClass];
+                if (method === 'fixed-height') {
+                    // Show fixed height input
+                    fixedHeightGroup.style.display = 'block';
+                    fixedHeightInput.required = true;
+                } else {
+                    // Hide fixed height input
+                    fixedHeightGroup.style.display = 'none';
+                    fixedHeightInput.required = false;
+                    fixedHeightInput.value = '';
                 }
             }
             
@@ -443,6 +449,7 @@
                 const ductClass = formData.get('ductClass');
                 const insulationThickness = parseFloat(formData.get('insulationThickness')) || 0;
                 
+                // Get velocity
                 let velocity;
                 if (velocityClass === 'custom') {
                     velocity = parseFloat(formData.get('velocity'));
@@ -463,14 +470,21 @@
                     velocity = velocityLimits[velocityClass];
                 }
                 
-                // Validate rectangular duct method selection
+                // Validate required fields
+                if (!airflow || !velocity || !ductClass || !velocityClass) {
+                    alert('Please fill in all required fields');
+                    return;
+                }
+                
+                // Validate rectangular method if rectangular is selected
                 if (this.selectedShape === 'rectangular') {
-                    if (!this.rectangularMethod) {
-                        alert('Please select a rectangular sizing method (Auto Size or Fixed Height)');
+                    const rectangularMethod = formData.get('rectangularMethod');
+                    if (!rectangularMethod) {
+                        alert('Please select a rectangular sizing method');
                         return;
                     }
                     
-                    if (this.rectangularMethod === 'fixed-height') {
+                    if (rectangularMethod === 'fixed-height') {
                         const fixedHeight = parseFloat(formData.get('fixedHeight'));
                         if (!fixedHeight || fixedHeight < 4 || fixedHeight > 72) {
                             alert('Please enter a valid fixed height between 4 and 72 inches');
@@ -479,29 +493,29 @@
                     }
                 }
                 
-                if (!airflow || !velocity || !ductClass || !velocityClass) {
-                    alert('Please fill in all required fields');
-                    return;
-                }
-                
-                const results = this.calculateDuctSize(airflow, velocity, ductClass, velocityClass, insulationThickness);
+                // Calculate results
+                const results = this.calculateDuctSize(formData, velocity);
                 this.displayResults(results);
             }
             
-            calculateDuctSize(airflow, velocity, ductClass, velocityClass, insulationThickness) {
-                // Required cross-sectional area (sq ft)
-                const requiredArea = airflow / velocity;
+            calculateDuctSize(formData, velocity) {
+                const airflow = parseFloat(formData.get('airflow'));
+                const velocityClass = formData.get('velocityClass');
+                const ductClass = formData.get('ductClass');
+                const insulationThickness = parseFloat(formData.get('insulationThickness')) || 0;
+                const requiredArea = airflow / velocity; // sq ft
                 
                 let dimensions = {};
                 let equivalentDiameter = 0;
                 let actualVelocity = velocity;
+                let rectangularMethod = '';
                 
                 if (this.selectedShape === 'rectangular') {
-                    if (this.rectangularMethod === 'fixed-height') {
-                        // Get the fixed height from the form
-                        const fixedHeight = parseFloat(document.getElementById('fixedHeight').value);
-                        
-                        // Calculate width based on fixed height
+                    rectangularMethod = formData.get('rectangularMethod');
+                    
+                    if (rectangularMethod === 'fixed-height') {
+                        // Fixed height calculation
+                        const fixedHeight = parseFloat(formData.get('fixedHeight'));
                         const requiredWidth = (requiredArea * 144) / fixedHeight; // convert to inches
                         const standardWidth = this.roundToStandardSize(requiredWidth);
                         const actualArea = (standardWidth * fixedHeight) / 144; // back to sq ft
@@ -514,38 +528,44 @@
                         
                         actualVelocity = airflow / actualArea;
                         
-                    } else { // auto sizing - prefer square-ish dimensions
-                        // For auto sizing, prioritize square or near-square dimensions
-                        const sideLength = Math.sqrt(requiredArea * 144); // in inches
+                    } else {
+                        // Auto size - make it square-ish
+                        const sideLength = Math.sqrt(requiredArea * 144); // inches
                         let width = this.roundToStandardSize(sideLength);
                         let height = this.roundToStandardSize(sideLength);
                         
-                        // Fine-tune to get closer to required area
                         let actualArea = (width * height) / 144;
                         let actualVel = airflow / actualArea;
                         
-                        // If velocity is too high, try larger dimensions
-                        if (actualVel > velocity * 1.1) {
-                            // Try increasing both dimensions
+                        // Adjust if velocity is too far off
+                        if (actualVel > velocity * 1.15) {
+                            // Try next larger sizes
                             const nextWidth = this.getNextLargerSize(width);
                             const nextHeight = this.getNextLargerSize(height);
                             
-                            const option1 = { w: nextWidth, h: height, area: (nextWidth * height) / 144 };
-                            const option2 = { w: width, h: nextHeight, area: (width * nextHeight) / 144 };
-                            const option3 = { w: nextWidth, h: nextHeight, area: (nextWidth * nextHeight) / 144 };
-                            
-                            // Choose the option that gives velocity closest to target
                             const options = [
-                                { ...option1, vel: airflow / option1.area, width: option1.w, height: option1.h },
-                                { ...option2, vel: airflow / option2.area, width: option2.w, height: option2.h },
-                                { ...option3, vel: airflow / option3.area, width: option3.w, height: option3.h }
+                                { w: nextWidth, h: height },
+                                { w: width, h: nextHeight },
+                                { w: nextWidth, h: nextHeight }
                             ];
                             
-                            const best = options.sort((a, b) => Math.abs(a.vel - velocity) - Math.abs(b.vel - velocity))[0];
-                            width = best.width;
-                            height = best.height;
-                            actualArea = best.area;
-                            actualVel = best.vel;
+                            let bestOption = { w: width, h: height };
+                            let bestVelDiff = Math.abs(actualVel - velocity);
+                            
+                            options.forEach(opt => {
+                                const area = (opt.w * opt.h) / 144;
+                                const vel = airflow / area;
+                                const velDiff = Math.abs(vel - velocity);
+                                if (velDiff < bestVelDiff) {
+                                    bestOption = opt;
+                                    bestVelDiff = velDiff;
+                                }
+                            });
+                            
+                            width = bestOption.w;
+                            height = bestOption.h;
+                            actualArea = (width * height) / 144;
+                            actualVel = airflow / actualArea;
                         }
                         
                         dimensions = {
@@ -557,12 +577,12 @@
                         actualVelocity = actualVel;
                     }
                     
-                    // Calculate equivalent diameter for rectangular duct
+                    // Calculate equivalent diameter
                     equivalentDiameter = (4 * dimensions.actualArea * 144) / (2 * (dimensions.width + dimensions.height));
                     
-                } else { // circular
-                    // Calculate diameter for circular duct
-                    const diameter = Math.sqrt((4 * requiredArea) / Math.PI) * 12; // convert to inches
+                } else {
+                    // Circular duct
+                    const diameter = Math.sqrt((4 * requiredArea) / Math.PI) * 12; // inches
                     const standardDiameter = this.roundToStandardCircularSize(diameter);
                     const actualArea = Math.PI * Math.pow(standardDiameter / 12, 2) / 4;
                     
@@ -575,7 +595,7 @@
                     equivalentDiameter = standardDiameter;
                 }
                 
-                // Calculate overall dimensions including insulation
+                // Calculate overall dimensions with insulation
                 let overallDimensions = {};
                 if (this.selectedShape === 'rectangular') {
                     overallDimensions = {
@@ -588,89 +608,25 @@
                     };
                 }
                 
-                // Calculate additional parameters with improved pressure loss based on velocity class
+                // Calculate pressure parameters
+                const velocityPressure = Math.pow(actualVelocity / 4005, 2);
                 const pressureLoss = this.estimatePressureLoss(actualVelocity, ductClass, velocityClass);
-                const velocityPressure = Math.pow(actualVelocity / 4005, 2); // inches of water
                 
                 return {
+                    airflow: airflow,
                     requiredArea: requiredArea,
                     dimensions: dimensions,
                     overallDimensions: overallDimensions,
                     insulationThickness: insulationThickness,
                     actualVelocity: actualVelocity,
                     equivalentDiameter: equivalentDiameter,
-                    pressureLoss: pressureLoss,
                     velocityPressure: velocityPressure,
+                    pressureLoss: pressureLoss,
                     ductClass: ductClass,
                     velocityClass: velocityClass,
                     shape: this.selectedShape,
-                    rectangularMethod: this.rectangularMethod
+                    rectangularMethod: rectangularMethod
                 };
-            }
-            
-            roundToStandardSize(dimension) {
-                // Standard rectangular duct sizes (inches)
-                const standardSizes = [
-                    6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36,
-                    38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 64, 68, 72
-                ];
-                
-                return standardSizes.reduce((prev, curr) => {
-                    return Math.abs(curr - dimension) < Math.abs(prev - dimension) ? curr : prev;
-                });
-            }
-            
-            getNextLargerSize(currentSize) {
-                // Standard rectangular duct sizes (inches)
-                const standardSizes = [
-                    6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36,
-                    38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 64, 68, 72
-                ];
-                
-                const currentIndex = standardSizes.indexOf(currentSize);
-                if (currentIndex !== -1 && currentIndex < standardSizes.length - 1) {
-                    return standardSizes[currentIndex + 1];
-                }
-                return currentSize; // Return same size if not found or already at max
-            }
-            
-            roundToStandardCircularSize(diameter) {
-                // Standard circular duct sizes (inches)
-                const standardSizes = [
-                    4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36
-                ];
-                
-                return standardSizes.reduce((prev, curr) => {
-                    return Math.abs(curr - diameter) < Math.abs(prev - diameter) ? curr : prev;
-                });
-            }
-            
-            estimatePressureLoss(velocity, ductClass, velocityClass) {
-                // Enhanced pressure loss estimation based on velocity classification
-                let baseFactors = {
-                    'supply-main': 0.08,
-                    'supply-branch': 0.10,
-                    'return-main': 0.06,
-                    'return-branch': 0.08,
-                    'exhaust': 0.12,
-                    'outside-air': 0.07
-                };
-                
-                // Adjust base factor based on velocity class (higher velocities = higher losses)
-                let velocityMultiplier = 1;
-                switch(velocityClass) {
-                    case 'quiet': velocityMultiplier = 0.8; break;
-                    case 'standard': velocityMultiplier = 1.0; break;
-                    case 'economy': velocityMultiplier = 1.1; break;
-                    case 'loud': velocityMultiplier = 1.3; break;
-                    case 'low-pressure': velocityMultiplier = 1.5; break;
-                    case 'medium-pressure': velocityMultiplier = 2.0; break;
-                    case 'high-pressure': velocityMultiplier = 2.8; break;
-                    default: velocityMultiplier = 1.0;
-                }
-                
-                const baseFactor = (baseFactors[ductClass] || 0.08) * velocityMultiplier;
-                return (baseFactor * Math.pow(velocity / 1000, 1.85)).toFixed(3);
             }
             
             displayResults(results) {
@@ -719,7 +675,6 @@
                     }
                 }
                 
-                // Get velocity class display name
                 const velocityClassNames = {
                     'quiet': 'Quiet (Class I)',
                     'standard': 'Standard (Class II)',
@@ -731,7 +686,6 @@
                     'custom': 'Custom'
                 };
                 
-                // Add sizing method info for rectangular ducts
                 let sizingMethodHtml = '';
                 if (results.shape === 'rectangular') {
                     const methodName = results.rectangularMethod === 'fixed-height' ? 'Fixed Height' : 'Auto-Sized (Square-ish)';
@@ -780,9 +734,69 @@
                 this.results.classList.add('show');
                 this.results.scrollIntoView({ behavior: 'smooth' });
             }
+            
+            roundToStandardSize(dimension) {
+                const standardSizes = [
+                    6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36,
+                    38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 64, 68, 72
+                ];
+                
+                return standardSizes.reduce((prev, curr) => {
+                    return Math.abs(curr - dimension) < Math.abs(prev - dimension) ? curr : prev;
+                });
+            }
+            
+            getNextLargerSize(currentSize) {
+                const standardSizes = [
+                    6, 8, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36,
+                    38, 40, 42, 44, 46, 48, 50, 52, 54, 56, 58, 60, 64, 68, 72
+                ];
+                
+                const currentIndex = standardSizes.indexOf(currentSize);
+                if (currentIndex !== -1 && currentIndex < standardSizes.length - 1) {
+                    return standardSizes[currentIndex + 1];
+                }
+                return currentSize;
+            }
+            
+            roundToStandardCircularSize(diameter) {
+                const standardSizes = [
+                    4, 5, 6, 7, 8, 9, 10, 12, 14, 16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36
+                ];
+                
+                return standardSizes.reduce((prev, curr) => {
+                    return Math.abs(curr - diameter) < Math.abs(prev - diameter) ? curr : prev;
+                });
+            }
+            
+            estimatePressureLoss(velocity, ductClass, velocityClass) {
+                let baseFactors = {
+                    'supply-main': 0.08,
+                    'supply-branch': 0.10,
+                    'return-main': 0.06,
+                    'return-branch': 0.08,
+                    'exhaust': 0.12,
+                    'outside-air': 0.07
+                };
+                
+                let velocityMultiplier = 1;
+                switch(velocityClass) {
+                    case 'quiet': velocityMultiplier = 0.8; break;
+                    case 'standard': velocityMultiplier = 1.0; break;
+                    case 'economy': velocityMultiplier = 1.1; break;
+                    case 'loud': velocityMultiplier = 1.3; break;
+                    case 'low-pressure': velocityMultiplier = 1.5; break;
+                    case 'medium-pressure': velocityMultiplier = 2.0; break;
+                    case 'high-pressure': velocityMultiplier = 2.8; break;
+                    default: velocityMultiplier = 1.0;
+                }
+                
+                const baseFactor = (baseFactors[ductClass] || 0.08) * velocityMultiplier;
+                return (baseFactor * Math.pow(velocity / 1000, 1.85)).toFixed(3);
+            }
         }
         
-        // Initialize the calculator when the page loads
+        // Initialize when page loads
         document.addEventListener('DOMContentLoaded', () => {
             new DuctworkCalculator();
         });
